@@ -2,7 +2,7 @@
 /**
  * Plugin Name: DM IDML Importer
  * Description: Imports repeating InDesign IDML layouts into Digitales Magazin ACF blocks (Infoseiten + Fotostrecken).
- * Version: 0.1.0
+ * Version: 0.1.1
  */
 
 declare(strict_types=1);
@@ -11,7 +11,12 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-final class DM_IDML_Importer
+// Avoid fatals if the plugin file is loaded twice for any reason.
+if (class_exists('DM_IDML_Importer_Plugin', false)) {
+    return;
+}
+
+final class DM_IDML_Importer_Plugin
 {
     private const IDML_NS = 'http://ns.adobe.com/AdobeInDesign/idml/1.0/packaging';
     private const ADMIN_SLUG = 'dm-idml-import';
@@ -719,7 +724,9 @@ final class DM_IDML_Importer
                     }
                 }
             }
-            usort($candidates, static fn($a, $b) => strlen($a) <=> strlen($b));
+            usort($candidates, static function ($a, $b) {
+                return strlen($a) <=> strlen($b);
+            });
             $headline = (string)($candidates[0] ?? '');
         }
 
@@ -734,7 +741,9 @@ final class DM_IDML_Importer
                     }
                 }
             }
-            usort($candidates, static fn($a, $b) => strlen($a) <=> strlen($b));
+            usort($candidates, static function ($a, $b) {
+                return strlen($a) <=> strlen($b);
+            });
             $lead = (string)($candidates[0] ?? '');
         }
 
@@ -1109,7 +1118,9 @@ final class DM_IDML_Importer
             $paragraphs[] = ['style' => $style, 'text' => $text_buf, 'url' => $url_buf];
         }
 
-        $text_all = implode("\n", array_map(static fn($p) => (string)$p['text'], $paragraphs));
+        $text_all = implode("\n", array_map(static function ($p) {
+            return (string)$p['text'];
+        }, $paragraphs));
 
         return [
             'id' => $story_id,
@@ -1158,7 +1169,9 @@ final class DM_IDML_Importer
                         }
                         $url_lines[] = self::extract_textish_from_xml_fragment((string)$urow[2]);
                     }
-                    $url_buf = trim(implode("\n", array_filter($url_lines, static fn($l) => trim((string)$l) !== '')));
+                    $url_buf = trim(implode("\n", array_filter($url_lines, static function ($l) {
+                        return trim((string)$l) !== '';
+                    })));
                     if ($url_buf === '') {
                         $has_url_style = false;
                     }
@@ -1166,7 +1179,7 @@ final class DM_IDML_Importer
 
                 $text_inner = preg_replace_callback('/<CharacterStyleRange\\b[^>]*AppliedCharacterStyle=\"([^\"]+)\"[^>]*>[\\s\\S]*?<\\/CharacterStyleRange>/i', static function ($m) {
                     $cstyle = (string)($m[1] ?? '');
-                    return DM_IDML_Importer::is_url_character_style($cstyle) ? '' : (string)($m[0] ?? '');
+                    return DM_IDML_Importer_Plugin::is_url_character_style($cstyle) ? '' : (string)($m[0] ?? '');
                 }, $inner) ?? $inner;
                 $text_buf = self::extract_textish_from_xml_fragment($text_inner);
 
@@ -1178,7 +1191,9 @@ final class DM_IDML_Importer
             }
         }
 
-        $text_all = implode("\n", array_map(static fn($p) => (string)$p['text'], $paragraphs));
+        $text_all = implode("\n", array_map(static function ($p) {
+            return (string)$p['text'];
+        }, $paragraphs));
 
         return [
             'id' => $id,
@@ -1247,7 +1262,9 @@ final class DM_IDML_Importer
         }
 
         if ($ort_para !== null) {
-            $lines = array_values(array_filter(array_map('trim', preg_split('/\\R/u', (string)$ort_para['text']) ?: []), static fn($l) => $l !== ''));
+            $lines = array_values(array_filter(array_map('trim', preg_split('/\\R/u', (string)$ort_para['text']) ?: []), static function ($l) {
+                return $l !== '';
+            }));
             $location = self::normalize_text((string)($lines[0] ?? ''));
             if ($headline === '' && isset($lines[1])) {
                 $headline = self::normalize_text((string)$lines[1]);
@@ -1523,7 +1540,9 @@ final class DM_IDML_Importer
             }
         }
 
-        return implode("\n\n", array_filter($blocks, static fn($b) => $b !== '')) . "\n";
+        return implode("\n\n", array_filter($blocks, static function ($b) {
+            return $b !== '';
+        })) . "\n";
     }
 
     private static function block_acf_ownheader(string $headline, int $attachment_id): string
@@ -1896,6 +1915,11 @@ final class DM_IDML_Importer
     }
 }
 
-add_action('init', [DM_IDML_Importer::class, 'register_wp_cli']);
-add_action('init', [DM_IDML_Importer::class, 'register_admin']);
-add_action('init', [DM_IDML_Importer::class, 'register_update_notifications']);
+add_action('init', [DM_IDML_Importer_Plugin::class, 'register_wp_cli']);
+add_action('init', [DM_IDML_Importer_Plugin::class, 'register_admin']);
+add_action('init', [DM_IDML_Importer_Plugin::class, 'register_update_notifications']);
+
+// Backwards compatibility: some installs may still reference the old class name.
+if (!class_exists('DM_IDML_Importer', false)) {
+    class_alias('DM_IDML_Importer_Plugin', 'DM_IDML_Importer');
+}
